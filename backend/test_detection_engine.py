@@ -50,7 +50,7 @@ def test_high_severity_finding():
     assert finding["threat"] == "Brute Force"
 
 
-def test_low_severity_finding():
+def test_normal_finding():
     finding = create_finding(
         "192.168.1.10",
         0,
@@ -58,5 +58,5 @@ def test_low_severity_finding():
         0
     )
 
-    assert finding["severity"] == "LOW"
-    assert finding["threat"] == "Suspicious Activity"
+    assert finding["severity"] == "NORMAL"
+    assert finding["threat"] == "Normal Activity"
