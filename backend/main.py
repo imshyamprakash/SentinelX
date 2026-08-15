@@ -1,5 +1,6 @@
 from log_parser import read_log_file
 from detection_engine import calculate_risk_score, detect_brute_force
+from finding import create_finding
 
 
 content = read_log_file("backend/data/sample.log")
@@ -87,8 +88,17 @@ for ip in ip_counts:
 
     brute_force_detected = detect_brute_force(failed_logins)
 
+    finding = create_finding(
+        ip,
+        risk_score,
+        failed_logins,
+        warnings
+    )
+
     print(
         ip,
         "→ Risk Score:", risk_score,
         "| Brute Force:", brute_force_detected
     )
+
+    print("Finding:", finding)
