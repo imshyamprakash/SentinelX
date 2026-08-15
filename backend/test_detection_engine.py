@@ -1,4 +1,4 @@
-from detection_engine import calculate_risk_score
+from detection_engine import calculate_risk_score, detect_brute_force
 
 
 def test_failed_login_and_warning():
@@ -23,3 +23,15 @@ def test_multiple_failed_logins():
     score = calculate_risk_score(3, 0, 3)
 
     assert score == 8
+
+
+def test_brute_force_detected():
+    result = detect_brute_force(3)
+
+    assert result is True
+
+
+def test_brute_force_not_detected():
+    result = detect_brute_force(2)
+
+    assert result is False

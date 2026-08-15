@@ -8,3 +8,7 @@ def calculate_risk_score(failed_logins, warnings, total_events):
         risk_score += 2
 
     return risk_score
+
+
+def detect_brute_force(failed_logins):
+    return failed_logins >= 3
