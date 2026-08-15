@@ -1,5 +1,6 @@
 from detection_engine import calculate_risk_score, detect_brute_force
 from finding import create_finding
+from report import generate_report
 
 
 def test_failed_login_and_warning():
@@ -60,3 +61,24 @@ def test_normal_finding():
 
     assert finding["severity"] == "NORMAL"
     assert finding["threat"] == "Normal Activity"
+
+
+def test_generate_report():
+    findings = [
+        {
+            "ip": "192.168.1.15",
+            "threat": "Brute Force",
+            "severity": "HIGH",
+            "risk_score": 11,
+            "failed_logins": 3,
+            "warnings": 1
+        }
+    ]
+
+    report = generate_report(findings)
+
+    assert "SENTINELX SECURITY REPORT" in report
+    assert "192.168.1.15" in report
+    assert "Brute Force" in report
+    assert "HIGH" in report
+    assert "Risk Score   : 11" in report
