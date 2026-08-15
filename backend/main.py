@@ -1,5 +1,5 @@
 from log_parser import read_log_file
-from detection_engine import calculate_risk_score
+from detection_engine import calculate_risk_score, detect_brute_force
 
 
 content = read_log_file("backend/data/sample.log")
@@ -85,4 +85,10 @@ for ip in ip_counts:
         total_events
     )
 
-    print(ip, "→ Risk Score:", risk_score)
+    brute_force_detected = detect_brute_force(failed_logins)
+
+    print(
+        ip,
+        "→ Risk Score:", risk_score,
+        "| Brute Force:", brute_force_detected
+    )
