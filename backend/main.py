@@ -1,4 +1,5 @@
 from log_parser import read_log_file
+from detection_engine import calculate_risk_score
 
 
 content = read_log_file("backend/data/sample.log")
@@ -74,15 +75,14 @@ print("Risk Analysis:")
 
 for ip in ip_counts:
 
-    risk_score = 0
+    failed_logins = failed_login_counts.get(ip, 0)
+    warnings = warning_counts.get(ip, 0)
+    total_events = ip_counts[ip]
 
-    if ip in failed_login_counts:
-        risk_score += failed_login_counts[ip] * 2
-
-    if ip in warning_counts:
-        risk_score += warning_counts[ip] * 3
-
-    if ip_counts[ip] >= 3:
-        risk_score += 2
+    risk_score = calculate_risk_score(
+        failed_logins,
+        warnings,
+        total_events
+    )
 
     print(ip, "→ Risk Score:", risk_score)
