@@ -1,10 +1,6 @@
 def generate_report(findings):
     report = []
 
-    report.append("=" * 50)
-    report.append("        SENTINELX SECURITY REPORT")
-    report.append("=" * 50)
-
     for finding in findings:
         report.append("")
         report.append("IP Address   : " + finding["ip"])

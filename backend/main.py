@@ -1,16 +1,33 @@
 from log_parser import read_log_file
 from detection_engine import calculate_risk_score, detect_brute_force
 from finding import create_finding
+from report import generate_report
 
+
+# --------------------------------------------------
+# READ LOG FILE
+# --------------------------------------------------
 
 content = read_log_file("backend/data/sample.log")
 
+
+# --------------------------------------------------
+# DATA STORAGE
+# --------------------------------------------------
+
 error_count = 0
 warning_count = 0
+
 ip_counts = {}
 failed_login_counts = {}
 warning_counts = {}
 
+findings = []
+
+
+# --------------------------------------------------
+# PARSE LOG DATA
+# --------------------------------------------------
 
 for line in content:
 
@@ -40,39 +57,10 @@ for line in content:
         else:
             warning_counts[ip_address] = 1
 
-    print(line)
 
-
-print("Total errors:", error_count)
-print("Total warnings:", warning_count)
-
-
-print("IP Activity:")
-
-for ip, count in ip_counts.items():
-    print(ip, "→", count, "events")
-
-
-print("Failed Login Activity:")
-
-for ip, count in failed_login_counts.items():
-    print(ip, "→", count, "failed logins")
-
-
-print("Warning Activity:")
-
-for ip, count in warning_counts.items():
-    print(ip, "→", count, "warnings")
-
-
-print("Suspicious IPs:")
-
-for ip, count in ip_counts.items():
-    if count >= 3:
-        print(ip, "→", count, "events")
-
-
-print("Risk Analysis:")
+# --------------------------------------------------
+# ANALYZE IP ACTIVITY
+# --------------------------------------------------
 
 for ip in ip_counts:
 
@@ -95,10 +83,141 @@ for ip in ip_counts:
         warnings
     )
 
+    finding["brute_force"] = brute_force_detected
+
+    findings.append(finding)
+
+
+# ==================================================
+# SENTINELX HEADER
+# ==================================================
+
+print()
+print("=" * 55)
+print("           SENTINELX SECURITY ANALYZER")
+print("=" * 55)
+
+
+# ==================================================
+# LOG SUMMARY
+# ==================================================
+
+print()
+print("LOG SUMMARY")
+print("-" * 55)
+
+print("Total Log Events :", len(content))
+print("Errors           :", error_count)
+print("Warnings         :", warning_count)
+
+
+# ==================================================
+# IP ACTIVITY
+# ==================================================
+
+print()
+print("IP ACTIVITY")
+print("-" * 55)
+
+for ip, count in ip_counts.items():
+
+    event_word = "event" if count == 1 else "events"
+
+    print(f"{ip} → {count} {event_word}")
+
+
+# ==================================================
+# AUTHENTICATION ACTIVITY
+# ==================================================
+
+print()
+print("AUTHENTICATION ACTIVITY")
+print("-" * 55)
+
+if failed_login_counts:
+
+    for ip, count in failed_login_counts.items():
+
+        login_word = "failed login" if count == 1 else "failed logins"
+
+        print(f"{ip} → {count} {login_word}")
+
+else:
+
+    print("No failed login activity detected.")
+
+
+# ==================================================
+# WARNING ACTIVITY
+# ==================================================
+
+print()
+print("WARNING ACTIVITY")
+print("-" * 55)
+
+if warning_counts:
+
+    for ip, count in warning_counts.items():
+
+        warning_word = "warning" if count == 1 else "warnings"
+
+        print(f"{ip} → {count} {warning_word}")
+
+else:
+
+    print("No warning activity detected.")
+
+
+# ==================================================
+# THREAT DETECTION
+# ==================================================
+
+print()
+print("THREAT DETECTION")
+print("-" * 55)
+
+threat_detected = False
+
+for finding in findings:
+
+    if finding["brute_force"]:
+
+        print(
+            f"{finding['ip']} → "
+            "BRUTE FORCE DETECTED"
+        )
+
+        threat_detected = True
+
+
+if not threat_detected:
+
+    print("No brute-force activity detected.")
+
+
+# ==================================================
+# RISK ANALYSIS
+# ==================================================
+
+print()
+print("RISK ANALYSIS")
+print("-" * 55)
+
+for finding in findings:
+
     print(
-        ip,
-        "→ Risk Score:", risk_score,
-        "| Brute Force:", brute_force_detected
+        f"{finding['ip']} → "
+        f"{finding['severity']} | "
+        f"Score: {finding['risk_score']}"
     )
 
-    print("Finding:", finding)
+
+# ==================================================
+# SECURITY REPORT
+# ==================================================
+
+print()
+print("SECURITY REPORT")
+print("=" * 55)
+
+print(generate_report(findings))

@@ -77,7 +77,6 @@ def test_generate_report():
 
     report = generate_report(findings)
 
-    assert "SENTINELX SECURITY REPORT" in report
     assert "192.168.1.15" in report
     assert "Brute Force" in report
     assert "HIGH" in report
