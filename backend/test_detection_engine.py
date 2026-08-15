@@ -1,4 +1,5 @@
 from detection_engine import calculate_risk_score, detect_brute_force
+from finding import create_finding
 
 
 def test_failed_login_and_warning():
@@ -35,3 +36,27 @@ def test_brute_force_not_detected():
     result = detect_brute_force(2)
 
     assert result is False
+
+
+def test_high_severity_finding():
+    finding = create_finding(
+        "192.168.1.15",
+        11,
+        3,
+        1
+    )
+
+    assert finding["severity"] == "HIGH"
+    assert finding["threat"] == "Brute Force"
+
+
+def test_low_severity_finding():
+    finding = create_finding(
+        "192.168.1.10",
+        0,
+        0,
+        0
+    )
+
+    assert finding["severity"] == "LOW"
+    assert finding["threat"] == "Suspicious Activity"
