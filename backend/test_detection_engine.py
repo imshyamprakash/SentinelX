@@ -1,4 +1,9 @@
-from detection_engine import calculate_risk_score, detect_brute_force
+from detection_engine import (
+    calculate_risk_score,
+    detect_brute_force,
+    detect_time_based_brute_force
+)
+
 from finding import create_finding
 from report import generate_report
 from log_parser import read_log_file, is_valid_log_line
@@ -112,3 +117,35 @@ def test_valid_ipv4_address():
     line = "2026-08-06 10:01:30 ERROR Failed login 10.0.0.1"
 
     assert is_valid_log_line(line) is True
+
+
+def test_time_based_brute_force_detected():
+    timestamps = [
+        "2026-08-06 10:08:30",
+        "2026-08-06 10:08:45",
+        "2026-08-06 10:09:00"
+    ]
+
+    result = detect_time_based_brute_force(
+        timestamps,
+        threshold=3,
+        window_seconds=60
+    )
+
+    assert result is True
+
+
+def test_time_based_brute_force_not_detected():
+    timestamps = [
+        "2026-08-06 10:00:00",
+        "2026-08-06 12:00:00",
+        "2026-08-06 14:00:00"
+    ]
+
+    result = detect_time_based_brute_force(
+        timestamps,
+        threshold=3,
+        window_seconds=60
+    )
+
+    assert result is False
