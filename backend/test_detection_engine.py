@@ -1,6 +1,7 @@
 from detection_engine import calculate_risk_score, detect_brute_force
 from finding import create_finding
 from report import generate_report
+from log_parser import read_log_file
 
 
 def test_failed_login_and_warning():
@@ -81,3 +82,9 @@ def test_generate_report():
     assert "Brute Force" in report
     assert "HIGH" in report
     assert "Risk Score   : 11" in report
+
+
+def test_read_log_file():
+    lines = read_log_file("backend/data/sample.log")
+
+    assert len(lines) == 7
