@@ -6,7 +6,11 @@ from detection_engine import (
 
 from finding import create_finding
 from report import generate_report
-from log_parser import read_log_file, is_valid_log_line
+from log_parser import (
+    read_log_file,
+    is_valid_log_line,
+    extract_timestamp
+)
 
 
 def test_failed_login_and_warning():
@@ -149,3 +153,20 @@ def test_time_based_brute_force_not_detected():
     )
 
     assert result is False
+
+
+def test_extract_timestamp():
+    line = "2026-08-06 10:08:30 ERROR Failed login 192.168.1.15"
+
+    timestamp = extract_timestamp(line)
+
+    assert timestamp is not None
+    assert timestamp.strftime("%Y-%m-%d %H:%M:%S") == "2026-08-06 10:08:30"
+
+
+def test_invalid_timestamp():
+    line = "invalid timestamp ERROR Failed login 192.168.1.15"
+
+    timestamp = extract_timestamp(line)
+
+    assert timestamp is None

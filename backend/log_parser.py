@@ -1,4 +1,5 @@
 import ipaddress
+from datetime import datetime
 
 
 def read_log_file(file_path):
@@ -35,3 +36,21 @@ def is_valid_log_line(line):
         return False
 
     return True
+
+
+def extract_timestamp(line):
+    parts = line.split()
+
+    if len(parts) < 2:
+        return None
+
+    timestamp_text = parts[0] + " " + parts[1]
+
+    try:
+        return datetime.strptime(
+            timestamp_text,
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+    except ValueError:
+        return None
