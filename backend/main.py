@@ -1,29 +1,33 @@
 from log_parser import (
     read_log_file,
     is_valid_log_line,
-    extract_timestamp
+    extract_timestamp,
+    extract_port
 )
 
 from detection_engine import (
     calculate_risk_score,
     detect_brute_force,
-    detect_time_based_brute_force
+    detect_time_based_brute_force,
+    detect_port_scan
 )
 
 from finding import create_finding
 from report import generate_report
 
 
-# --------------------------------------------------
+# ==================================================
 # READ LOG FILE
-# --------------------------------------------------
+# ==================================================
 
-content = read_log_file("backend/data/sample.log")
+content = read_log_file(
+    "backend/data/sample.log"
+)
 
 
-# --------------------------------------------------
+# ==================================================
 # DATA STORAGE
-# --------------------------------------------------
+# ==================================================
 
 error_count = 0
 warning_count = 0
@@ -34,19 +38,19 @@ ip_counts = {}
 failed_login_counts = {}
 warning_counts = {}
 
-# Store failed-login timestamps for each IP
 failed_login_timestamps = {}
+
+port_scan_events = {}
 
 findings = []
 
 
-# --------------------------------------------------
+# ==================================================
 # PARSE AND VALIDATE LOG DATA
-# --------------------------------------------------
+# ==================================================
 
 for line in content:
 
-    # Ignore malformed log entries
     if not is_valid_log_line(line):
         invalid_log_count += 1
         continue
@@ -54,19 +58,30 @@ for line in content:
     valid_log_count += 1
 
     parts = line.split()
-    ip_address = parts[-1]
+
+    port = extract_port(line)
+
+    if port is not None:
+        ip_address = parts[-2]
+    else:
+        ip_address = parts[-1]
 
     timestamp = extract_timestamp(line)
 
-    # Count errors
+    # --------------------------------------------------
+    # LOG LEVEL COUNTS
+    # --------------------------------------------------
+
     if "ERROR" in line:
         error_count += 1
 
-    # Count warnings
     if "WARNING" in line:
         warning_count += 1
 
-    # Count activity for each IP
+    # --------------------------------------------------
+    # IP ACTIVITY
+    # --------------------------------------------------
+
     if ip_address in ip_counts:
         ip_counts[ip_address] += 1
     else:
@@ -83,15 +98,14 @@ for line in content:
         else:
             failed_login_counts[ip_address] = 1
 
-        # Store timestamp for time-based detection
         if timestamp is not None:
 
             if ip_address not in failed_login_timestamps:
                 failed_login_timestamps[ip_address] = []
 
-            failed_login_timestamps[ip_address].append(
-                timestamp
-            )
+            failed_login_timestamps[
+                ip_address
+            ].append(timestamp)
 
     # --------------------------------------------------
     # WARNING ACTIVITY
@@ -104,45 +118,128 @@ for line in content:
         else:
             warning_counts[ip_address] = 1
 
+    # --------------------------------------------------
+    # PORT SCAN ACTIVITY
+    # --------------------------------------------------
 
-# --------------------------------------------------
+    if (
+        port is not None
+        and timestamp is not None
+        and "Connection attempt" in line
+    ):
+
+        if ip_address not in port_scan_events:
+            port_scan_events[ip_address] = []
+
+        port_scan_events[ip_address].append(
+            (timestamp, port)
+        )
+
+
+# ==================================================
 # ANALYZE IP ACTIVITY
-# --------------------------------------------------
+# ==================================================
 
 for ip in ip_counts:
 
-    failed_logins = failed_login_counts.get(ip, 0)
-    warnings = warning_counts.get(ip, 0)
-    total_events = ip_counts[ip]
-
-    risk_score = calculate_risk_score(
-        failed_logins,
-        warnings,
-        total_events
+    failed_logins = failed_login_counts.get(
+        ip,
+        0
     )
 
-    # Basic brute-force detection
+    warnings = warning_counts.get(
+        ip,
+        0
+    )
+
+    total_events = ip_counts[ip]
+
+    # --------------------------------------------------
+    # BRUTE FORCE DETECTION
+    # --------------------------------------------------
+
     basic_brute_force = detect_brute_force(
         failed_logins
     )
 
-    # Time-aware brute-force detection
     timestamps = failed_login_timestamps.get(
         ip,
         []
     )
 
-    time_based_brute_force = detect_time_based_brute_force(
-        timestamps,
-        threshold=3,
+    time_based_brute_force = (
+        detect_time_based_brute_force(
+            timestamps,
+            threshold=3,
+            window_seconds=60
+        )
+    )
+
+    # --------------------------------------------------
+    # PORT SCAN DETECTION
+    # --------------------------------------------------
+
+    ports = port_scan_events.get(
+        ip,
+        []
+    )
+
+    port_scan_detected = detect_port_scan(
+        ports,
+        threshold=5,
         window_seconds=60
     )
 
-    # Either detection rule can trigger brute force
+    # --------------------------------------------------
+    # RISK SCORE
+    # --------------------------------------------------
+
+    risk_score = calculate_risk_score(
+        failed_logins,
+        warnings,
+        total_events,
+        port_scan=port_scan_detected
+    )
+
+    # --------------------------------------------------
+    # DETERMINE THREATS
+    # --------------------------------------------------
+
     brute_force_detected = (
         basic_brute_force
         or time_based_brute_force
     )
+
+    # --------------------------------------------------
+    # DETECTION REASON
+    # --------------------------------------------------
+
+    if time_based_brute_force:
+
+        detection_reason = (
+            "3 failed logins within 60 seconds"
+        )
+
+    elif basic_brute_force:
+
+        detection_reason = (
+            f"{failed_logins} failed logins detected"
+        )
+
+    elif port_scan_detected:
+
+        detection_reason = (
+            "5 distinct ports targeted "
+            "within 60 seconds"
+        )
+
+    else:
+
+        detection_reason = None
+
+    # --------------------------------------------------
+    # CREATE FINDING
+    # --------------------------------------------------
 
     finding = create_finding(
         ip,
@@ -151,9 +248,26 @@ for ip in ip_counts:
         warnings
     )
 
-    finding["brute_force"] = brute_force_detected
+    if (
+        port_scan_detected
+        and not brute_force_detected
+    ):
+        finding["threat"] = "Port Scan"
+
+    finding["brute_force"] = (
+        brute_force_detected
+    )
+
     finding["time_based_brute_force"] = (
         time_based_brute_force
+    )
+
+    finding["port_scan"] = (
+        port_scan_detected
+    )
+
+    finding["detection_reason"] = (
+        detection_reason
     )
 
     findings.append(finding)
@@ -164,8 +278,13 @@ for ip in ip_counts:
 # ==================================================
 
 print()
+
 print("=" * 55)
-print("           SENTINELX SECURITY ANALYZER")
+
+print(
+    "           SENTINELX SECURITY ANALYZER"
+)
+
 print("=" * 55)
 
 
@@ -174,15 +293,32 @@ print("=" * 55)
 # ==================================================
 
 print()
+
 print("LOG SUMMARY")
+
 print("-" * 55)
 
-print("Total Log Events :", valid_log_count)
-print("Errors           :", error_count)
-print("Warnings         :", warning_count)
+print(
+    "Total Log Events :",
+    valid_log_count
+)
+
+print(
+    "Errors           :",
+    error_count
+)
+
+print(
+    "Warnings         :",
+    warning_count
+)
 
 if invalid_log_count > 0:
-    print("Invalid Log Lines:", invalid_log_count)
+
+    print(
+        "Invalid Log Lines:",
+        invalid_log_count
+    )
 
 
 # ==================================================
@@ -190,7 +326,9 @@ if invalid_log_count > 0:
 # ==================================================
 
 print()
+
 print("IP ACTIVITY")
+
 print("-" * 55)
 
 for ip, count in ip_counts.items():
@@ -211,7 +349,9 @@ for ip, count in ip_counts.items():
 # ==================================================
 
 print()
+
 print("AUTHENTICATION ACTIVITY")
+
 print("-" * 55)
 
 if failed_login_counts:
@@ -240,7 +380,9 @@ else:
 # ==================================================
 
 print()
+
 print("WARNING ACTIVITY")
+
 print("-" * 55)
 
 if warning_counts:
@@ -269,7 +411,9 @@ else:
 # ==================================================
 
 print()
+
 print("THREAT DETECTION")
+
 print("-" * 55)
 
 threat_detected = False
@@ -278,20 +422,29 @@ for finding in findings:
 
     if finding["brute_force"]:
 
-        if finding["time_based_brute_force"]:
+        print(
+            f"{finding['ip']} → "
+            "BRUTE FORCE DETECTED"
+        )
 
-            print(
-                f"{finding['ip']} → "
-                "BRUTE FORCE DETECTED "
-                "(3 failures within 60 seconds)"
-            )
+        print(
+            f"  Reason: "
+            f"{finding['detection_reason']}"
+        )
 
-        else:
+        threat_detected = True
 
-            print(
-                f"{finding['ip']} → "
-                "BRUTE FORCE DETECTED"
-            )
+    elif finding["port_scan"]:
+
+        print(
+            f"{finding['ip']} → "
+            "PORT SCAN DETECTED"
+        )
+
+        print(
+            f"  Reason: "
+            f"{finding['detection_reason']}"
+        )
 
         threat_detected = True
 
@@ -299,7 +452,7 @@ for finding in findings:
 if not threat_detected:
 
     print(
-        "No brute-force activity detected."
+        "No suspicious activity detected."
     )
 
 
@@ -308,7 +461,9 @@ if not threat_detected:
 # ==================================================
 
 print()
+
 print("RISK ANALYSIS")
+
 print("-" * 55)
 
 for finding in findings:
@@ -325,7 +480,9 @@ for finding in findings:
 # ==================================================
 
 print()
+
 print("SECURITY REPORT")
+
 print("=" * 55)
 
 print(
