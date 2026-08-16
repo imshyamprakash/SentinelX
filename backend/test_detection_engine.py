@@ -100,3 +100,15 @@ def test_invalid_log_line():
     line = "THIS IS NOT A VALID LOG"
 
     assert is_valid_log_line(line) is False
+
+
+def test_invalid_ip_address():
+    line = "2026-08-06 10:01:30 ERROR Failed login 999.999.999.999"
+
+    assert is_valid_log_line(line) is False
+
+
+def test_valid_ipv4_address():
+    line = "2026-08-06 10:01:30 ERROR Failed login 10.0.0.1"
+
+    assert is_valid_log_line(line) is True

@@ -1,3 +1,6 @@
+import ipaddress
+
+
 def read_log_file(file_path):
     try:
         with open(file_path, "r") as file:
@@ -24,10 +27,11 @@ def is_valid_log_line(line):
     if len(parts) < 5:
         return False
 
-    if parts[1] == "":
-        return False
+    ip_address = parts[-1]
 
-    if parts[-1].count(".") != 3:
+    try:
+        ipaddress.ip_address(ip_address)
+    except ValueError:
         return False
 
     return True
