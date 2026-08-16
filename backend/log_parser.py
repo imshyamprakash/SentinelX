@@ -16,3 +16,18 @@ def read_log_file(file_path):
     except OSError as error:
         print("Error reading log file:", error)
         return []
+
+
+def is_valid_log_line(line):
+    parts = line.split()
+
+    if len(parts) < 5:
+        return False
+
+    if parts[1] == "":
+        return False
+
+    if parts[-1].count(".") != 3:
+        return False
+
+    return True

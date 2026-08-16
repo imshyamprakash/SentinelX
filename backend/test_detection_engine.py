@@ -1,7 +1,7 @@
 from detection_engine import calculate_risk_score, detect_brute_force
 from finding import create_finding
 from report import generate_report
-from log_parser import read_log_file
+from log_parser import read_log_file, is_valid_log_line
 
 
 def test_failed_login_and_warning():
@@ -88,3 +88,15 @@ def test_read_log_file():
     lines = read_log_file("backend/data/sample.log")
 
     assert len(lines) == 7
+
+
+def test_valid_log_line():
+    line = "2026-08-06 10:01:30 ERROR Failed login 192.168.1.15"
+
+    assert is_valid_log_line(line) is True
+
+
+def test_invalid_log_line():
+    line = "THIS IS NOT A VALID LOG"
+
+    assert is_valid_log_line(line) is False

@@ -1,4 +1,4 @@
-from log_parser import read_log_file
+from log_parser import read_log_file, is_valid_log_line
 from detection_engine import calculate_risk_score, detect_brute_force
 from finding import create_finding
 from report import generate_report
@@ -17,6 +17,8 @@ content = read_log_file("backend/data/sample.log")
 
 error_count = 0
 warning_count = 0
+valid_log_count = 0
+invalid_log_count = 0
 
 ip_counts = {}
 failed_login_counts = {}
@@ -26,10 +28,17 @@ findings = []
 
 
 # --------------------------------------------------
-# PARSE LOG DATA
+# PARSE AND VALIDATE LOG DATA
 # --------------------------------------------------
 
 for line in content:
+
+    # Ignore empty or malformed log entries
+    if not is_valid_log_line(line):
+        invalid_log_count += 1
+        continue
+
+    valid_log_count += 1
 
     if "ERROR" in line:
         error_count += 1
@@ -40,17 +49,20 @@ for line in content:
     parts = line.split()
     ip_address = parts[-1]
 
+    # Count activity for each IP
     if ip_address in ip_counts:
         ip_counts[ip_address] += 1
     else:
         ip_counts[ip_address] = 1
 
+    # Count failed logins
     if "Failed login" in line:
         if ip_address in failed_login_counts:
             failed_login_counts[ip_address] += 1
         else:
             failed_login_counts[ip_address] = 1
 
+    # Count warnings
     if "WARNING" in line:
         if ip_address in warning_counts:
             warning_counts[ip_address] += 1
@@ -74,7 +86,9 @@ for ip in ip_counts:
         total_events
     )
 
-    brute_force_detected = detect_brute_force(failed_logins)
+    brute_force_detected = detect_brute_force(
+        failed_logins
+    )
 
     finding = create_finding(
         ip,
@@ -106,9 +120,12 @@ print()
 print("LOG SUMMARY")
 print("-" * 55)
 
-print("Total Log Events :", len(content))
+print("Total Log Events :", valid_log_count)
 print("Errors           :", error_count)
 print("Warnings         :", warning_count)
+
+if invalid_log_count > 0:
+    print("Invalid Log Lines:", invalid_log_count)
 
 
 # ==================================================
@@ -138,7 +155,11 @@ if failed_login_counts:
 
     for ip, count in failed_login_counts.items():
 
-        login_word = "failed login" if count == 1 else "failed logins"
+        login_word = (
+            "failed login"
+            if count == 1
+            else "failed logins"
+        )
 
         print(f"{ip} → {count} {login_word}")
 
@@ -159,7 +180,11 @@ if warning_counts:
 
     for ip, count in warning_counts.items():
 
-        warning_word = "warning" if count == 1 else "warnings"
+        warning_word = (
+            "warning"
+            if count == 1
+            else "warnings"
+        )
 
         print(f"{ip} → {count} {warning_word}")
 
