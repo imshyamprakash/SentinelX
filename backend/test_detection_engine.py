@@ -1,8 +1,11 @@
+from datetime import datetime
+
 from detection_engine import (
     calculate_risk_score,
     detect_brute_force,
     detect_time_based_brute_force,
-    detect_port_scan
+    detect_port_scan,
+    detect_account_attack
 )
 
 from finding import create_finding
@@ -12,7 +15,8 @@ from log_parser import (
     read_log_file,
     is_valid_log_line,
     extract_timestamp,
-    extract_port
+    extract_port,
+    extract_username
 )
 
 
@@ -86,6 +90,31 @@ def test_without_port_scan_risk_score_is_unchanged():
     )
 
     assert score == 2
+
+
+def test_account_attack_increases_risk_score():
+
+    score = calculate_risk_score(
+        failed_logins=0,
+        warnings=0,
+        total_events=3,
+        account_attack=True
+    )
+
+    assert score == 7
+
+
+def test_account_attack_and_port_scan_both_increase_risk_score():
+
+    score = calculate_risk_score(
+        failed_logins=0,
+        warnings=0,
+        total_events=1,
+        port_scan=True,
+        account_attack=True
+    )
+
+    assert score == 10
 
 
 # ==================================================
@@ -202,6 +231,104 @@ def test_port_scan_requires_distinct_ports():
 
 
 # ==================================================
+# MULTI-ACCOUNT ATTACK TESTS
+# ==================================================
+
+def test_account_attack_detected_with_three_distinct_users():
+
+    events = [
+        ("2026-08-06 10:00:00", "alice"),
+        ("2026-08-06 10:01:00", "bob"),
+        ("2026-08-06 10:04:59", "charlie")
+    ]
+
+    assert detect_account_attack(events) is True
+
+
+def test_account_attack_detected_at_exact_five_minute_boundary():
+
+    events = [
+        ("2026-08-06 10:00:00", "alice"),
+        ("2026-08-06 10:02:30", "bob"),
+        ("2026-08-06 10:05:00", "charlie")
+    ]
+
+    assert detect_account_attack(events) is True
+
+
+def test_account_attack_not_detected_with_only_two_distinct_users():
+
+    events = [
+        ("2026-08-06 10:00:00", "alice"),
+        ("2026-08-06 10:01:00", "bob"),
+        ("2026-08-06 10:02:00", "alice")
+    ]
+
+    assert detect_account_attack(events) is False
+
+
+def test_account_attack_is_case_insensitive_for_duplicate_users():
+
+    events = [
+        ("2026-08-06 10:00:00", "alice"),
+        ("2026-08-06 10:01:00", "ALICE"),
+        ("2026-08-06 10:02:00", "Alice")
+    ]
+
+    assert detect_account_attack(events) is False
+
+
+def test_account_attack_not_detected_outside_time_window():
+
+    events = [
+        ("2026-08-06 10:00:00", "alice"),
+        ("2026-08-06 10:02:30", "bob"),
+        ("2026-08-06 10:05:01", "charlie")
+    ]
+
+    assert detect_account_attack(events) is False
+
+
+def test_account_attack_ignores_malformed_and_duplicate_events():
+
+    events = [
+        None,
+        ("not a timestamp", "alice"),
+        ("2026-08-06 10:00:00", ""),
+        ("2026-08-06 10:00:00", None),
+        ("2026-08-06 10:00:00", "alice"),
+        ("2026-08-06 10:00:01", "ALICE"),
+        ("2026-08-06 10:00:02", "bob"),
+        ("2026-08-06 10:00:03", "malformed!")
+    ]
+
+    assert detect_account_attack(events) is False
+
+
+def test_account_attack_accepts_unsorted_datetime_events():
+
+    events = [
+        (datetime(2026, 8, 6, 10, 2), "bob"),
+        (datetime(2026, 8, 6, 10, 0), "alice"),
+        (datetime(2026, 8, 6, 10, 4), "charlie")
+    ]
+
+    assert detect_account_attack(events) is True
+
+
+def test_account_attack_rejects_invalid_rule_parameters():
+
+    events = [
+        ("2026-08-06 10:00:00", "alice"),
+        ("2026-08-06 10:01:00", "bob"),
+        ("2026-08-06 10:02:00", "charlie")
+    ]
+
+    assert detect_account_attack(events, threshold=0) is False
+    assert detect_account_attack(events, window_seconds=-1) is False
+
+
+# ==================================================
 # FINDING TESTS
 # ==================================================
 
@@ -237,6 +364,26 @@ def test_normal_finding():
         finding["threat"]
         == "Normal Activity"
     )
+
+
+def test_account_attack_finding_includes_targeted_accounts():
+
+    finding = create_finding(
+        "192.168.1.60",
+        13,
+        3,
+        0,
+        account_attack=True,
+        targeted_accounts=["alice", "bob", "charlie"]
+    )
+
+    assert finding["threat"] == "Account Attack"
+    assert finding["account_attack"] is True
+    assert finding["targeted_accounts"] == [
+        "alice",
+        "bob",
+        "charlie"
+    ]
 
 
 # ==================================================
@@ -279,6 +426,27 @@ def test_generate_report():
     )
 
 
+def test_report_includes_account_attack_details():
+
+    finding = create_finding(
+        "192.168.1.60",
+        13,
+        3,
+        0,
+        account_attack=True,
+        targeted_accounts=["alice", "bob", "charlie"]
+    )
+    finding["account_attack_reason"] = (
+        "3 distinct usernames targeted within 5 minutes"
+    )
+
+    report = generate_report([finding])
+
+    assert "Account Attack: Yes" in report
+    assert "Targeted Accounts: alice, bob, charlie" in report
+    assert "within 5 minutes" in report
+
+
 # ==================================================
 # LOG FILE TESTS
 # ==================================================
@@ -289,7 +457,7 @@ def test_read_log_file():
         "backend/data/sample.log"
     )
 
-    assert len(lines) == 12
+    assert len(lines) == 15
 
 
 def test_valid_log_line():
@@ -344,6 +512,46 @@ def test_valid_ipv4_address():
         is_valid_log_line(line)
         is True
     )
+
+
+def test_extract_username_for_user_format():
+
+    line = (
+        "2026-08-06 10:01:30 ERROR Failed login "
+        "for user alice 192.168.1.15"
+    )
+
+    assert extract_username(line) == "alice"
+
+
+def test_extract_username_for_account_and_key_value_formats():
+
+    account_line = (
+        "2026-08-06 10:01:30 ERROR Failed login "
+        "for account Domain\\alice 192.168.1.15"
+    )
+    key_value_line = (
+        "2026-08-06 10:01:30 ERROR Failed login "
+        "username=bob 192.168.1.15"
+    )
+
+    assert extract_username(account_line) == "Domain\\alice"
+    assert extract_username(key_value_line) == "bob"
+
+
+def test_extract_username_ignores_missing_or_malformed_values():
+
+    no_username_line = (
+        "2026-08-06 10:01:30 ERROR Failed login "
+        "192.168.1.15"
+    )
+    malformed_username_line = (
+        "2026-08-06 10:01:30 ERROR Failed login "
+        "user=alice! 192.168.1.15"
+    )
+
+    assert extract_username(no_username_line) is None
+    assert extract_username(malformed_username_line) is None
 
 
 # ==================================================

@@ -2,14 +2,16 @@ from log_parser import (
     read_log_file,
     is_valid_log_line,
     extract_timestamp,
-    extract_port
+    extract_port,
+    extract_username
 )
 
 from detection_engine import (
     calculate_risk_score,
     detect_brute_force,
     detect_time_based_brute_force,
-    detect_port_scan
+    detect_port_scan,
+    detect_account_attack
 )
 
 from finding import create_finding
@@ -41,6 +43,7 @@ warning_counts = {}
 failed_login_timestamps = {}
 
 port_scan_events = {}
+account_attack_events = {}
 
 findings = []
 
@@ -91,7 +94,7 @@ for line in content:
     # FAILED LOGIN ACTIVITY
     # --------------------------------------------------
 
-    if "Failed login" in line:
+    if "failed login" in line.casefold():
 
         if ip_address in failed_login_counts:
             failed_login_counts[ip_address] += 1
@@ -106,6 +109,16 @@ for line in content:
             failed_login_timestamps[
                 ip_address
             ].append(timestamp)
+
+        username = extract_username(line)
+
+        if username is not None and timestamp is not None:
+            if ip_address not in account_attack_events:
+                account_attack_events[ip_address] = []
+
+            account_attack_events[ip_address].append(
+                (timestamp, username)
+            )
 
     # --------------------------------------------------
     # WARNING ACTIVITY
@@ -191,6 +204,31 @@ for ip in ip_counts:
     )
 
     # --------------------------------------------------
+    # MULTI-ACCOUNT ATTACK DETECTION
+    # --------------------------------------------------
+
+    account_events = account_attack_events.get(
+        ip,
+        []
+    )
+
+    account_attack_detected = detect_account_attack(
+        account_events,
+        threshold=3,
+        window_seconds=300
+    )
+
+    targeted_accounts = []
+    seen_accounts = set()
+
+    for _, username in account_events:
+        normalized_username = username.casefold()
+
+        if normalized_username not in seen_accounts:
+            targeted_accounts.append(username)
+            seen_accounts.add(normalized_username)
+
+    # --------------------------------------------------
     # RISK SCORE
     # --------------------------------------------------
 
@@ -198,7 +236,8 @@ for ip in ip_counts:
         failed_logins,
         warnings,
         total_events,
-        port_scan=port_scan_detected
+        port_scan=port_scan_detected,
+        account_attack=account_attack_detected
     )
 
     # --------------------------------------------------
@@ -245,7 +284,9 @@ for ip in ip_counts:
         ip,
         risk_score,
         failed_logins,
-        warnings
+        warnings,
+        account_attack=account_attack_detected,
+        targeted_accounts=targeted_accounts
     )
 
     if (
@@ -265,6 +306,20 @@ for ip in ip_counts:
     finding["port_scan"] = (
         port_scan_detected
     )
+
+    finding["account_attack"] = (
+        account_attack_detected
+    )
+
+    finding["targeted_accounts"] = (
+        targeted_accounts
+    )
+
+    if account_attack_detected:
+        finding["account_attack_reason"] = (
+            "3 distinct usernames targeted "
+            "within 5 minutes"
+        )
 
     finding["detection_reason"] = (
         detection_reason
@@ -444,6 +499,25 @@ for finding in findings:
         print(
             f"  Reason: "
             f"{finding['detection_reason']}"
+        )
+
+        threat_detected = True
+
+    if finding["account_attack"]:
+
+        print(
+            f"{finding['ip']} → "
+            "CREDENTIAL/ACCOUNT ATTACK DETECTED"
+        )
+
+        print(
+            "  Reason: "
+            f"{finding['account_attack_reason']}"
+        )
+
+        print(
+            "  Targeted accounts: "
+            f"{', '.join(finding['targeted_accounts'])}"
         )
 
         threat_detected = True

@@ -1,4 +1,11 @@
-def create_finding(ip, risk_score, failed_logins, warnings):
+def create_finding(
+    ip,
+    risk_score,
+    failed_logins,
+    warnings,
+    account_attack=False,
+    targeted_accounts=None
+):
     if risk_score >= 10:
         severity = "HIGH"
     elif risk_score >= 5:
@@ -8,7 +15,9 @@ def create_finding(ip, risk_score, failed_logins, warnings):
     else:
         severity = "NORMAL"
 
-    if failed_logins >= 3:
+    if account_attack:
+        threat = "Account Attack"
+    elif failed_logins >= 3:
         threat = "Brute Force"
     elif risk_score > 0:
         threat = "Suspicious Activity"
@@ -21,5 +30,7 @@ def create_finding(ip, risk_score, failed_logins, warnings):
         "severity": severity,
         "risk_score": risk_score,
         "failed_logins": failed_logins,
-        "warnings": warnings
+        "warnings": warnings,
+        "account_attack": account_attack,
+        "targeted_accounts": targeted_accounts or []
     }

@@ -1,5 +1,19 @@
 import ipaddress
+import re
 from datetime import datetime
+
+
+_USERNAME_PATTERN = re.compile(
+    r"\bFailed\s+login\b"
+    r"(?:\s+for\s+(?:user|account)\s+"
+    r"|\s+(?:username|user|account)\s*[:=]\s*)"
+    r"(?P<username>[^\s,;]+)",
+    re.IGNORECASE
+)
+
+_USERNAME_ALLOWED_CHARACTERS = set(
+    "_.@-\\"
+)
 
 
 def read_log_file(file_path):
@@ -101,3 +115,36 @@ def extract_port(line):
         return None
 
     return None
+
+
+def extract_username(line):
+    """Extract a username from a failed-login log entry.
+
+    Supported formats include ``Failed login for user alice`` and
+    ``Failed login username=alice``. The username must be a single token
+    containing letters, numbers, or common account-name characters.
+    """
+
+    if not isinstance(line, str):
+        return None
+
+    match = _USERNAME_PATTERN.search(line)
+
+    if match is None:
+        return None
+
+    username = match.group("username").strip(
+        "\"'<>[](){}"
+    )
+
+    if not username or len(username) > 128:
+        return None
+
+    if not all(
+        character.isalnum()
+        or character in _USERNAME_ALLOWED_CHARACTERS
+        for character in username
+    ):
+        return None
+
+    return username

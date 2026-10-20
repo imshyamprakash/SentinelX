@@ -10,3 +10,6 @@
 2026-08-06 10:10:10 INFO Connection attempt 192.168.1.50 80
 2026-08-06 10:10:15 INFO Connection attempt 192.168.1.50 443
 2026-08-06 10:10:20 INFO Connection attempt 192.168.1.50 3389
+2026-08-06 10:15:00 ERROR Failed login for user alice 192.168.1.60
+2026-08-06 10:17:30 ERROR Failed login for user bob 192.168.1.60
+2026-08-06 10:20:00 ERROR Failed login for user charlie 192.168.1.60
